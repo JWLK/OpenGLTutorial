@@ -33,23 +33,17 @@ public class Square {
 
     private int screenWidth;
     private int screenHeight;
+    private float[] currentColor = new float[4]; // RGBA
 
-    private float convertX(float xPixel) {
-        return -1 + (2.0f / screenWidth) * xPixel;
-    }
-
-    private float convertY(float yPixel) {
-        return 1 - (2.0f / screenHeight) * yPixel;
-    }
-
-    public Square(float sideLength, float xPixel, float yPixel, float scaleFactorX, float scaleFactorY, int screenWidth, int screenHeight) {
+    public Square(float sideLength, float xPixel, float yPixel,
+                  float scaleFactorX, float scaleFactorY,
+                  int screenWidth, int screenHeight,
+                  int initialColor) {
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
 
         float xCoord = convertX(xPixel);
         float yCoord = convertY(yPixel);
-//        float halfWidthScaled = (sideLength / 2) * scaleFactorX;
-//        float halfHeightScaled = (sideLength / 2) * scaleFactorY;
 
         float halfWidthScaled = sideLength / screenWidth;
         float halfHeightScaled = sideLength / screenHeight;
@@ -62,7 +56,7 @@ public class Square {
         };
 
         // FloatBuffer 초기화
-        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(squareCoords.length * 4);
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(squareCoords.length * 4); //float [n] = n * 4 byte
         byteBuffer.order(ByteOrder.nativeOrder());
         vertexBuffer = byteBuffer.asFloatBuffer();
         vertexBuffer.put(squareCoords);
@@ -81,7 +75,14 @@ public class Square {
         GLES31.glAttachShader(mProgram, vertexShader);
         GLES31.glAttachShader(mProgram, fragmentShader);
         GLES31.glLinkProgram(mProgram);
+
+        // 초기 색상 설정
+        currentColor[0] = ((initialColor >> 16) & 0xFF) / 255.0f; // red
+        currentColor[1] = ((initialColor >> 8) & 0xFF) / 255.0f;  // green
+        currentColor[2] = (initialColor & 0xFF) / 255.0f;         // blue
+        currentColor[3] = ((initialColor >> 24) & 0xFF) / 255.0f; // alpha
     }
+
 
     private int loadShader(int type, String shaderCode) {
         int shader = GLES31.glCreateShader(type);
@@ -99,26 +100,65 @@ public class Square {
         return shader;
     }
 
-    public void draw(int argbColor) {
+    public void draw() {
         GLES31.glUseProgram(mProgram);
 
-        // VBO를 사용하여 그리기
         GLES31.glBindBuffer(GLES31.GL_ARRAY_BUFFER, mVBO[0]);
         int positionHandle = GLES31.glGetAttribLocation(mProgram, "vPosition");
         GLES31.glEnableVertexAttribArray(positionHandle);
         GLES31.glVertexAttribPointer(positionHandle, 3, GLES31.GL_FLOAT, false, 0, 0);
 
-        float alpha = ((argbColor >> 24) & 0xFF) / 255.0f;
-        float red = ((argbColor >> 16) & 0xFF) / 255.0f;
-        float green = ((argbColor >> 8) & 0xFF) / 255.0f;
-        float blue = (argbColor & 0xFF) / 255.0f;
-
         mColorHandle = GLES31.glGetUniformLocation(mProgram, "uColor");
-        GLES31.glUniform4f(mColorHandle, red, green, blue, alpha);
+        GLES31.glUniform4fv(mColorHandle, 1, currentColor, 0);
 
         GLES31.glDrawArrays(GLES31.GL_TRIANGLE_STRIP, 0, 4);
 
         GLES31.glDisableVertexAttribArray(positionHandle);
-        GLES31.glBindBuffer(GLES31.GL_ARRAY_BUFFER, 0);  // VBO 언바인딩
+        GLES31.glBindBuffer(GLES31.GL_ARRAY_BUFFER, 0);
     }
+
+    public void updateVertices(float xPixel, float yPixel, float sideLength) {
+        float xCoord = convertX(xPixel);
+        float yCoord = convertY(yPixel);
+        float halfWidthScaled = sideLength / screenWidth;
+        float halfHeightScaled = sideLength / screenHeight;
+
+        squareCoords[0] = xCoord - halfWidthScaled;
+        squareCoords[1] = yCoord + halfHeightScaled;
+        squareCoords[2] = 0.0f;
+        squareCoords[3] = xCoord - halfWidthScaled;
+        squareCoords[4] = yCoord - halfHeightScaled;
+        squareCoords[5] = 0.0f;
+        squareCoords[6] = xCoord + halfWidthScaled;
+        squareCoords[7] = yCoord + halfHeightScaled;
+        squareCoords[8] = 0.0f;
+        squareCoords[9] = xCoord + halfWidthScaled;
+        squareCoords[10] = yCoord - halfHeightScaled;
+        squareCoords[11] = 0.0f;
+
+        vertexBuffer.clear();
+        vertexBuffer.put(squareCoords);
+        vertexBuffer.position(0);
+
+        GLES31.glBindBuffer(GLES31.GL_ARRAY_BUFFER, mVBO[0]);
+        GLES31.glBufferData(GLES31.GL_ARRAY_BUFFER, vertexBuffer.capacity() * 4, vertexBuffer, GLES31.GL_DYNAMIC_DRAW);
+        GLES31.glBindBuffer(GLES31.GL_ARRAY_BUFFER, 0);
+    }
+
+    public void updateColor(int newArgbColor) {
+        currentColor[0] = ((newArgbColor >> 16) & 0xFF) / 255.0f; // red
+        currentColor[1] = ((newArgbColor >> 8) & 0xFF) / 255.0f;  // green
+        currentColor[2] = (newArgbColor & 0xFF) / 255.0f;         // blue
+        currentColor[3] = ((newArgbColor >> 24) & 0xFF) / 255.0f; // alpha
+    }
+
+    private float convertX(float xPixel) {
+        return -1 + (2.0f / screenWidth) * xPixel;
+    }
+
+    private float convertY(float yPixel) {
+        return 1 - (2.0f / screenHeight) * yPixel;
+    }
+
+
 }
